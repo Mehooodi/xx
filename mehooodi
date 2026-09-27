@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+GRADLE_VERSION="8.9"
+DIST_DIR="${HOME}/.gradle/nexvia-wrapper/gradle-${GRADLE_VERSION}"
+if [ ! -x "${DIST_DIR}/bin/gradle" ]; then
+  mkdir -p "${HOME}/.gradle/nexvia-wrapper"
+  TMP="${HOME}/.gradle/nexvia-wrapper/gradle-${GRADLE_VERSION}.zip"
+  if [ ! -f "$TMP" ]; then
+    curl -fL --retry 3 -o "$TMP" "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+  fi
+  rm -rf "$DIST_DIR.tmp"
+  mkdir -p "$DIST_DIR.tmp"
+  unzip -q -o "$TMP" -d "$DIST_DIR.tmp"
+  mv "$DIST_DIR.tmp/gradle-${GRADLE_VERSION}" "$DIST_DIR"
+  rmdir "$DIST_DIR.tmp" 2>/dev/null || true
+fi
+cd "$BASE_DIR"
+exec "$DIST_DIR/bin/gradle" "$@"
+
+# NEXVIA Android — Starter
+
+این نسخه، اسکلت اولیه اپ NEXVIA است:
+- صفحه ورود کد/رمز
+- داشبورد
+- دکمه اتصال نمایشی (فعلاً VPN واقعی وصل نمی‌کند)
+- برند NEXVIA
+- Designed by Mehooodi
+
+## اجرا
+1. Android Studio را نصب کن.
+2. این پوشه را Open کن.
+3. اجازه بده Gradle dependencies را دریافت کند.
+4. یک Android Emulator یا گوشی واقعی انتخاب کن.
+5. Run را بزن.
+
+## مرحله بعد
+بعد از آماده شدن VPS، بخش اتصال واقعی WireGuard/VPN و API احراز هویت به همین پروژه اضافه می‌شود.
+
+# NEXVIA VPN — Bitrise Build Package
+
+این نسخه برای Build ابری در Bitrise آماده شده است.
+
+## تنظیمات آماده
+- Android applicationId: `com.nexvia.vpn`
+- Build variant: `debug`
+- Output: APK
+- Module: `app`
+- Workflow: `primary`
+- خروجی APK توسط Deploy to Bitrise.io در صفحه Build قابل دانلود است.
+
+## روش استفاده
+1. محتوای این پوشه را داخل یک Repository در GitHub/GitLab قرار بده.
+2. در Bitrise همان Repository را به‌عنوان پروژه Android اضافه کن.
+3. Workflow با نام `primary` را انتخاب کن.
+4. Build را اجرا کن.
+5. بعد از موفقیت Build، از بخش Artifacts فایل APK را دانلود کن.
+
+> توجه: این APK فعلاً نسخه Starter است و دکمه اتصال VPN نمایشی است؛ اتصال واقعی WireGuard و API هنوز به سرور اختصاصی متصل نشده‌اند.
+
+pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = "NEXVIA"
+include(":app")
+
+format_version: "11"
+project_type: android
+
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+workflows:
+  primary:
+    steps:
+      - git-clone@8: {}
+      - install-missing-android-tools@3:
+          inputs:
+            - gradlew_path: ./gradlew
+      - android-build@1:
+          inputs:
+            - project_location: .
+            - module: app
+            - variant: debug
+            - build_type: apk
+            - app_path_pattern: "*/build/outputs/apk/*.apk"
+      - deploy-to-bitrise-io@2: {}
+
+plugins {
+    id("com.android.application") version "8.7.3" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
+}
+
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+kotlin.code.style=official
