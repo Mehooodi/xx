@@ -1,3 +1,38 @@
+format_version: "11"
+project_type: android
+
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+workflows:
+  primary:
+    steps:
+      - git-clone@8: {}
+      - script@1:
+          title: Make Gradle launcher executable
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -ex
+                chmod +x ./gradlew
+      - android-build@1:
+          inputs:
+            - project_location: .
+            - module: app
+            - variant: debug
+            - build_type: apk
+            - app_path_pattern: "*/build/outputs/apk/*.apk"
+      - deploy-to-bitrise-io@2: {}
+
+plugins {
+    id("com.android.application") version "8.7.3" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
+}
+
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+kotlin.code.style=official
+
 #!/usr/bin/env bash
 set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -65,34 +100,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "NEXVIA"
 include(":app")
-
-format_version: "11"
-project_type: android
-
-default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
-
-workflows:
-  primary:
-    steps:
-      - git-clone@8: {}
-      - install-missing-android-tools@3:
-          inputs:
-            - gradlew_path: ./gradlew
-      - android-build@1:
-          inputs:
-            - project_location: .
-            - module: app
-            - variant: debug
-            - build_type: apk
-            - app_path_pattern: "*/build/outputs/apk/*.apk"
-      - deploy-to-bitrise-io@2: {}
-
-plugins {
-    id("com.android.application") version "8.7.3" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
-}
-
-org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-android.useAndroidX=true
-kotlin.code.style=official
