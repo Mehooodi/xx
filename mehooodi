@@ -1,3 +1,36 @@
+format_version: "11"
+project_type: android
+
+trigger_map:
+  - push_branch: "*"
+    workflow: build_apk
+
+workflows:
+  build_apk:
+    steps:
+      - script@1:
+          title: Build NEXVIA APK
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euo pipefail
+                GRADLE_VERSION="8.9"
+                GRADLE_DIR="/tmp/gradle-${GRADLE_VERSION}"
+                GRADLE_ZIP="/tmp/gradle-${GRADLE_VERSION}-bin.zip"
+                curl -fsSL --retry 5 --retry-delay 2 "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o "${GRADLE_ZIP}"
+                rm -rf "${GRADLE_DIR}"
+                mkdir -p "${GRADLE_DIR}"
+                unzip -q "${GRADLE_ZIP}" -d "${GRADLE_DIR}"
+                GRADLE_BIN="${GRADLE_DIR}/gradle-${GRADLE_VERSION}/bin/gradle"
+                chmod +x "${GRADLE_BIN}"
+                "${GRADLE_BIN}" --version
+                "${GRADLE_BIN}" --no-daemon --stacktrace :app:assembleDebug
+                APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+                test -f "${APK_PATH}"
+      - deploy-to-bitrise-io@2:
+          inputs:
+            - deploy_path_list: app/build/outputs/apk/debug/app-debug.apk
+
 plugins {
     id("com.android.application") version "8.7.3" apply false
     id("org.jetbrains.kotlin.android") version "2.0.21" apply false
@@ -8,25 +41,11 @@ org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 android.useAndroidX=true
 kotlin.code.style=official
 
-#!/usr/bin/env bash
-set -euo pipefail
-BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-GRADLE_VERSION="8.9"
-DIST_DIR="${HOME}/.gradle/nexvia-wrapper/gradle-${GRADLE_VERSION}"
-if [ ! -x "${DIST_DIR}/bin/gradle" ]; then
-  mkdir -p "${HOME}/.gradle/nexvia-wrapper"
-  TMP="${HOME}/.gradle/nexvia-wrapper/gradle-${GRADLE_VERSION}.zip"
-  if [ ! -f "$TMP" ]; then
-    curl -fL --retry 3 -o "$TMP" "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
-  fi
-  rm -rf "$DIST_DIR.tmp"
-  mkdir -p "$DIST_DIR.tmp"
-  unzip -q -o "$TMP" -d "$DIST_DIR.tmp"
-  mv "$DIST_DIR.tmp/gradle-${GRADLE_VERSION}" "$DIST_DIR"
-  rmdir "$DIST_DIR.tmp" 2>/dev/null || true
-fi
-cd "$BASE_DIR"
-exec "$DIST_DIR/bin/gradle" "$@"
+#!/usr/bin/env sh
+# Bitrise build uses the self-contained workflow script and does not invoke this wrapper.
+# This launcher is kept only so Android project scanners recognize the repository.
+echo "NEXVIA: Bitrise workflow uses its pinned Gradle 8.9 installation." >&2
+exit 1
 
 # NEXVIA Android — Starter
 
@@ -47,26 +66,21 @@ exec "$DIST_DIR/bin/gradle" "$@"
 ## مرحله بعد
 بعد از آماده شدن VPS، بخش اتصال واقعی WireGuard/VPN و API احراز هویت به همین پروژه اضافه می‌شود.
 
-# NEXVIA VPN — Bitrise Build Package
+# NEXVIA — Bitrise build package
 
-این نسخه برای Build ابری در Bitrise آماده شده است.
+This package is prepared for Bitrise. The Bitrise workflow deliberately does **not** depend on `gradle-wrapper.jar`.
+Instead, the workflow downloads the pinned Gradle 8.9 distribution and runs `:app:assembleDebug`, then uploads `app-debug.apk` to Bitrise Artifacts.
 
-## تنظیمات آماده
-- Android applicationId: `com.nexvia.vpn`
-- Build variant: `debug`
-- Output: APK
-- Module: `app`
-- Workflow: `primary`
-- خروجی APK توسط Deploy to Bitrise.io در صفحه Build قابل دانلود است.
+## What to do
 
-## روش استفاده
-1. محتوای این پوشه را داخل یک Repository در GitHub/GitLab قرار بده.
-2. در Bitrise همان Repository را به‌عنوان پروژه Android اضافه کن.
-3. Workflow با نام `primary` را انتخاب کن.
-4. Build را اجرا کن.
-5. بعد از موفقیت Build، از بخش Artifacts فایل APK را دانلود کن.
+1. Replace the files in your GitHub repository with the contents of this folder.
+2. In Bitrise, use the `build_apk` workflow.
+3. Run the build.
+4. Download `app-debug.apk` from the Artifacts tab.
 
-> توجه: این APK فعلاً نسخه Starter است و دکمه اتصال VPN نمایشی است؛ اتصال واقعی WireGuard و API هنوز به سرور اختصاصی متصل نشده‌اند.
+The workflow also contains a push trigger for all branches.
+
+Note: this APK is still the NEXVIA starter app. The VPN button is a UI demo; real WireGuard/API connectivity has not yet been added.
 
 pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
 dependencyResolutionManagement {
@@ -75,28 +89,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "NEXVIA"
 include(":app")
-
-format_version: "11"
-project_type: android
-
-default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
-
-workflows:
-  primary:
-    steps:
-      - git-clone@8: {}
-      - script@1:
-          title: Make Gradle launcher executable
-          inputs:
-            - content: |
-                #!/usr/bin/env bash
-                set -ex
-                chmod +x ./gradlew
-      - android-build@1:
-          inputs:
-            - project_location: .
-            - module: app
-            - variant: debug
-            - build_type: apk
-            - app_path_pattern: "*/build/outputs/apk/*.apk"
-      - deploy-to-bitrise-io@2: {}
